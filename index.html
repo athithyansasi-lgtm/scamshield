@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ScamShield – Check a suspicious message</title>
+<style>
+:root{--bg:#f3f6f4;--ink:#14231c;--mute:#5b6b63;--card:#fff;--line:#d5ded9;--safe:#1f7a4d;--warn:#b7791f;--bad:#b3261e;--accent:#0f4c3a;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1a15;--ink:#e7efe9;--mute:#9bb0a5;--card:#16251e;--line:#2a3d33;--safe:#4cc38a;--warn:#e5b04a;--bad:#ff7b72;--accent:#4cc38a}}
+:root[data-theme="dark"]{--bg:#0f1a15;--ink:#e7efe9;--mute:#9bb0a5;--card:#16251e;--line:#2a3d33;--safe:#4cc38a;--warn:#e5b04a;--bad:#ff7b72;--accent:#4cc38a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Segoe UI",system-ui,sans-serif}
+main{max-width:760px;margin:0 auto;padding:28px 18px 60px}
+h1{font:700 2.1rem/1.15 Georgia,"Times New Roman",serif;margin:0 0 6px}
+.sub{color:var(--mute);margin:0 0 22px;max-width:60ch}
+textarea{width:100%;min-height:150px;padding:14px;border:1.5px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);font:inherit;resize:vertical}
+textarea:focus,button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.row{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0 24px;align-items:center}
+button{font:inherit;cursor:pointer;border-radius:8px;padding:10px 16px;border:1.5px solid var(--accent);background:var(--accent);color:#fff;font-weight:600}
+[data-theme="dark"] button.main,button.main{color:#fff}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) button.main{color:#0f1a15}}
+button.ghost{background:transparent;color:var(--ink);border-color:var(--line);font-weight:500;font-size:.9rem;padding:7px 12px}
+.lbl{color:var(--mute);font-size:.9rem}
+#out{display:none;border:1.5px solid var(--line);background:var(--card);border-radius:12px;padding:20px}
+.meter{height:14px;border-radius:7px;background:var(--line);overflow:hidden;margin:10px 0 6px}
+.meter i{display:block;height:100%;width:0;transition:width .5s}
+.verdict{font:700 1.5rem Georgia,serif;margin:0}
+.score{color:var(--mute);margin:0 0 14px}
+h2{font-size:1.05rem;margin:18px 0 8px}
+.flag{border-left:4px solid var(--warn);padding:6px 12px;margin:8px 0;background:var(--bg);border-radius:0 8px 8px 0}
+.flag b{display:block}
+.flag span{color:var(--mute);font-size:.93rem}
+.flag.h{border-color:var(--bad)}
+ul{padding-left:20px;margin:6px 0}
+mark{background:#ffd9d6;color:#5c0d08;border-radius:3px;padding:0 2px}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) mark{background:#5c1f1b;color:#ffd9d6}}
+.note{font-size:.85rem;color:var(--mute);margin-top:26px}
+</style>
+</head>
+<body>
+<main>
+<h1>ScamShield</h1>
+<p class="sub">Paste an SMS, email, WhatsApp message or link you're unsure about. ScamShield checks it for known scam patterns and tells you what to do next. Nothing leaves your device.</p>
+<label for="msg" class="lbl">Suspicious message or link</label>
+<textarea id="msg" placeholder="Paste the message here…"></textarea>
+<div class="row">
+<button class="main" id="go">Check message</button>
+<button class="ghost" id="clr">Clear</button>
+<span class="lbl">Try an example:</span>
+<button class="ghost" data-ex="0">Bank KYC</button>
+<button class="ghost" data-ex="1">UPI refund</button>
+<button class="ghost" data-ex="2">Courier fee</button>
+<button class="ghost" data-ex="3">Normal message</button>
+</div>
+<section id="out" aria-live="polite">
+<p class="verdict" id="vd"></p>
+<p class="score" id="sc"></p>
+<div class="meter"><i id="bar"></i></div>
+<h2>Why it was flagged</h2>
+<div id="flags"></div>
+<h2>Suspicious text</h2>
+<p id="hl"></p>
+<h2>What to do</h2>
+<ul id="adv"></ul>
+</section>
+<p class="note">ScamShield is a rule-based screening aid, not a guarantee. When in doubt, contact the organisation using the number on its official website or your card. In India, report cyber fraud at cybercrime.gov.in or call 1930.</p>
+</main>
+<script>
+var RULES=[
+{n:"Urgency or threat",w:18,d:"Scammers pressure you to act before you think.",r:/\b(urgent(ly)?|immediately|within \d+ ?(hours?|hrs?|minutes?)|last warning|final notice|expires? (today|soon)|act now|blocked|suspended|deactivated|legal action|arrest)\b/ig},
+{n:"Asks for KYC / account update",w:20,d:"Banks do not ask you to update KYC through links or SMS.",r:/\b(kyc|pan (card )?(update|verif\w+)|aadhaar (update|link\w*)|update your (account|details|profile)|verify your (account|identity|details))\b/ig},
+{n:"Asks for OTP, PIN or password",w:30,d:"No genuine bank, app or officer will ever ask for these.",r:/\b(otp|one[- ]time password|cvv|upi pin|atm pin|pin number|password|card number)\b/ig},
+{n:"Money, prize or reward bait",w:20,d:"Unexpected winnings and cashbacks are a classic hook.",r:/\b(you (have )?won|lottery|lucky draw|prize|reward points?|cashback|gift card|free (gift|iphone|recharge)|claim your|refund|crore|lakh)\b/ig},
+{n:"Asks you to pay or send money",w:22,d:"Small 'fees' or 'collect requests' are used to drain accounts.",r:/\b(pay (a )?(small )?(fee|charge|amount)|processing fee|customs fee|redelivery|send (₹|rs\.?|inr)\s?\d+|collect request|scan (the )?qr|approve (the )?request|registration fee|advance)\b/ig},
+{n:"Job or investment too good to be true",w:20,d:"Guaranteed returns and easy work-from-home pay are red flags.",r:/\b(work from home|part[- ]time job|earn (₹|rs\.?)?\s?\d+[,\d]* ?(per|a|every) (day|hour)|guaranteed returns?|double your money|crypto (investment|giveaway)|trading tips|100% (profit|safe))\b/ig},
+{n:"Impersonates authority or delivery firm",w:14,d:"Fake police, courier, tax or customs notices are common.",r:/\b(cbi|customs|income tax|rbi|police|cyber ?cell|narcotics|fedex|dhl|india post|bluedart|your parcel|package (is )?(held|stuck|on hold))\b/ig},
+{n:"Contains a shortened or odd link",w:22,d:"Short links hide the real destination.",r:/\b(bit\.ly|tinyurl\.com|t\.co|cutt\.ly|rb\.gy|is\.gd|goo\.gl|shorturl\.at)\/\S*/ig},
+{n:"Link with suspicious domain",w:24,d:"Unusual endings and look-alike words often mean a fake site.",r:/https?:\/\/\S*(\.(xyz|top|click|icu|work|live|buzz|shop|tk|cc|ru)\b|-(bank|kyc|secure|verify|update|login)\b|(sbi|hdfc|icici|paytm|phonepe|amazon)[-.]?\w*(kyc|secure|verify|login|update))\S*/ig},
+{n:"Raw IP address link",w:25,d:"Real companies use domain names, not numbers.",r:/https?:\/\/\d{1,3}(\.\d{1,3}){3}\S*/ig},
+{n:"Asks to install an app or share screen",w:26,d:"Remote-access apps let scammers see and control your phone.",r:/\b(anydesk|teamviewer|quicksupport|install (this )?app|download (the )?apk|\.apk\b|share your screen)\b/ig}
+];
+var EX=[
+"Dear customer, your SBI account will be BLOCKED today. Update your KYC immediately: http://sbi-kyc-update.xyz/login",
+"Sir you have received a refund of Rs 4999. Approve the collect request on your UPI app and enter your UPI PIN to receive money.",
+"India Post: your parcel is on hold. Pay a small redelivery fee of Rs 25 within 24 hours: https://bit.ly/3xYpost",
+"Hi, are we still meeting at 6 pm tomorrow? I'll bring the notes from class."
+];
+function esc(s){return s.replace(/[&<>]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;"}[c]})}
+function analyze(t){
+ var hits=[],score=0,spans=[];
+ RULES.forEach(function(r){
+  var m=t.match(r.r);
+  if(m){hits.push({n:r.n,d:r.d,w:r.w,ex:m[0]});score+=r.w;
+   var re=new RegExp(r.r.source,"ig"),x;
+   while((x=re.exec(t))){spans.push([x.index,x.index+x[0].length]);if(x[0].length===0)re.lastIndex++}}
+ });
+ if(hits.length>=3)score+=10;
+ return{score:Math.min(100,score),hits:hits,spans:spans};
+}
+function highlight(t,spans){
+ spans.sort(function(a,b){return a[0]-b[0]});
+ var out="",p=0;
+ spans.forEach(function(s){
+  if(s[0]<p){if(s[1]>p){out+="<mark>"+esc(t.slice(p,s[1]))+"</mark>";p=s[1]}return}
+  out+=esc(t.slice(p,s[0]))+"<mark>"+esc(t.slice(s[0],s[1]))+"</mark>";p=s[1];
+ });
+ return out+esc(t.slice(p));
+}
+function run(){
+ var t=document.getElementById("msg").value.trim();
+ if(!t){alert("Paste a message first.");return}
+ var a=analyze(t),s=a.score,v,c,adv;
+ if(s>=60){v="Very likely a scam";c="var(--bad)";adv=["Do not click any link, reply, or call numbers in the message.","Never share OTP, PIN, CVV or passwords with anyone.","If you already shared details, call your bank right away and block the card or UPI.","Report it at cybercrime.gov.in or call 1930 (India), then delete the message."]}
+ else if(s>=30){v="Suspicious – be careful";c="var(--warn)";adv=["Don't click links. Open the official app or website yourself instead.","Contact the sender through the number listed on their official site.","Ask a family member or friend before paying or sharing anything."]}
+ else{v="No strong scam signs";c="var(--safe)";adv=["Nothing obvious was found, but stay alert.","Never share OTPs or PINs, even if the message looks genuine.","Verify any unexpected request through an official channel."]}
+ document.getElementById("out").style.display="block";
+ var vd=document.getElementById("vd");vd.textContent=v;vd.style.color=c;
+ document.getElementById("sc").textContent="Risk score: "+s+" / 100";
+ var b=document.getElementById("bar");b.style.background=c;b.style.width="0";setTimeout(function(){b.style.width=s+"%"},20);
+ var f=document.getElementById("flags");
+ f.innerHTML=a.hits.length?a.hits.sort(function(x,y){return y.w-x.w}).map(function(h){return'<div class="flag'+(h.w>=22?" h":"")+'"><b>'+esc(h.n)+'</b><span>'+esc(h.d)+' Found: “'+esc(h.ex)+'”</span></div>'}).join(""):"<span class='lbl'>No known scam patterns found.</span>";
+ document.getElementById("hl").innerHTML=highlight(t,a.spans);
+ document.getElementById("adv").innerHTML=adv.map(function(x){return"<li>"+x+"</li>"}).join("");
+ document.getElementById("out").scrollIntoView({behavior:"smooth",block:"nearest"});
+}
+document.getElementById("go").onclick=run;
+document.getElementById("clr").onclick=function(){document.getElementById("msg").value="";document.getElementById("out").style.display="none"};
+document.querySelectorAll("[data-ex]").forEach(function(b){b.onclick=function(){document.getElementById("msg").value=EX[b.dataset.ex];run()}});
+</script>
+</body>
+</html>
